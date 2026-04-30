@@ -658,13 +658,13 @@ MonoBehaviour:
   barreSlider: {fileID: 373985122}
   scoreText: {fileID: 1935863382}
   timerText: {fileID: 1582081300}
+  elapsedTimeText: {fileID: 1680742459346613401, guid: 7d6b70dda457cfc41a5ee0a3ce49c08a, type: 3}
+  tempsTotal: 10
   vitesseDeDeplacement: 0.1
   largeurDuSlider: 150
   largeurZoneCible: 60
   forceVariationZone: 20
   vitesseVariationZone: 1
-  monScore: 0
-  tempsTotal: 60
 --- !u!4 &674955630
 Transform:
   m_ObjectHideFlags: 0
