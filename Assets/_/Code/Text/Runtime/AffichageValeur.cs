@@ -3,16 +3,16 @@ using TMPro;
 
 public class AffichageValeur : MonoBehaviour
 {
-    [SerializeField] private TextMeshProUGUI champTexte;
+    [SerializeField] private TextMeshProUGUI scoreText;
 
     // Cette fonction reçoit maintenant le score total
     public void MettreAJourTexte(float valeur)
     {
-        if (champTexte != null)
+        if (scoreText != null)
         {
             // "F0" permet d'afficher le score sans décimales
             // On enlève le * 100 et le % pour n'afficher que les points
-            champTexte.text = valeur.ToString("F0") + " PTS";
+            scoreText.text = valeur.ToString("F0") + " Points";
         }
     }
 }
