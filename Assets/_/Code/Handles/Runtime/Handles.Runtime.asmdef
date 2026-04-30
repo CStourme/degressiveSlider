@@ -1,7 +1,7 @@
 {
     "name": "Handles.Runtime",
     "rootNamespace": "Handles.Runtime",
-    "references": [],
+    "references": ["GUID:5b673d135855f7f40ba90365012d47ee"],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
