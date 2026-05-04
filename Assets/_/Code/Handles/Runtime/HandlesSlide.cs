@@ -24,6 +24,9 @@ public class HandleSlide : MonoBehaviour
     // Référence vers le prefab qui contient le message GAME OVER (Score à zéro)
     [SerializeField] public GameObject gameOverText;
     
+    // Référence vers le prefab qui contient le bouton "Restart"
+    [SerializeField] public GameObject retryButton;
+    
     // --- LES RÉGLAGES ---
     [Header("Gameplay Settings")]
     // Temps de protection pour ne pas perdre 5 points trop souvent (anti-spam de faute)
@@ -39,7 +42,8 @@ public class HandleSlide : MonoBehaviour
     
     [Header("Mouvement Global (Position)")]
     [SerializeField] public float vitesseDeDeplacement = 0.5f;
-    [SerializeField] public float largeurDuSlider = 150f;
+    [Tooltip("La moitié de la largeur totale du slider en pixels")]
+    [SerializeField] public float largeurDuSlider = 350f;
     
     [Header("Variation de l'Écart (Largeur)")]
     [Tooltip("L'écart moyen entre les deux poignées")]
@@ -54,6 +58,7 @@ public class HandleSlide : MonoBehaviour
     private float tempsEcouleLocal = 0f; // Chrono interne utilisé uniquement pour le calcul du bruit de Perlin
     private Image PoigneeGaucheColor;
     private Image PoigneeDroiteColor;
+    private RectTransform sliderRectTransform;
     
     // Valeur de décalage pour le Perlin Noise (permet de changer de "chemin" à chaque partie)
     private float seedActuelle;
@@ -65,6 +70,17 @@ public class HandleSlide : MonoBehaviour
 
     void Awake()
     {
+        // --- LOGIQUE DE REDIMENSIONNEMENT VISUEL DU SLIDER---
+        if (barreSlider != null)
+        {
+            // On récupère le composant qui gère la taille de l'objet UI
+            sliderRectTransform = barreSlider.GetComponent<RectTransform>();
+            
+            // On force la largeur de l'objet Slider pour qu'elle corresponde aux calculs
+            // Largeur totale = largeurDuSlider * 2
+            sliderRectTransform.sizeDelta = new Vector2(largeurDuSlider * 2f, sliderRectTransform.sizeDelta.y);
+        }
+        
         // On initialise le score de départ à 50
         monScore = 50f;
 
@@ -195,34 +211,53 @@ public class HandleSlide : MonoBehaviour
     }
 
     // --- FONCTION GÉNÉRALE DE FIN DE PARTIE ---
-    // Cette fonction centralise l'arrêt du jeu pour éviter les répétitions de code
+    // Gère la transition du jeu vers l'état de fin (Arrêt des systèmes, affichage UI).
     void TerminerPartie(GameObject prefabFin)
     {
+        // 1. VERROUILLAGE : On active l'interrupteur pour bloquer l'Update.
         jeuTermine = true; 
         
-        // On demande au timer de s'arrêter visuellement
+        // 2. SYNCHRONISATION : On fige le décompte visuel du timer.
         if (timerSystem != null) timerSystem.FigerTimer();
 
-        // On affiche le message de fin (Elapsed ou Game Over)
+        // 3. APPARITION DU MESSAGE DE FIN
         if (prefabFin != null)
         {
+            // On définit le parent (Canvas ou parent direct).
             Transform parentFinal = (canvasParent != null) ? canvasParent : transform.parent;
             GameObject instance = Instantiate(prefabFin, parentFinal);
             
             RectTransform rt = instance.GetComponent<RectTransform>();
             if (rt != null)
             {
+                // Centrage et mise à l'échelle (1,1,1) pour éviter les déformations d'instanciation.
                 rt.anchoredPosition = Vector2.zero;
                 rt.localScale = Vector3.one;
             }
             instance.SetActive(true);
         }
 
-        // On cache les éléments de jeu pour la propreté visuelle
+        // 4. APPARITION DU BOUTON RETRY
+        if (retryButton != null)
+        {
+            Transform parentFinal = (canvasParent != null) ? canvasParent : transform.parent;
+            GameObject boutonInstance = Instantiate(retryButton, parentFinal);
+            
+            RectTransform rtBouton = boutonInstance.GetComponent<RectTransform>();
+            if (rtBouton != null)
+            {
+                // On positionne le bouton légèrement sous le message de fin.
+                rtBouton.anchoredPosition = new Vector2(0, -120f); 
+                rtBouton.localScale = Vector3.one;
+            }
+            boutonInstance.SetActive(true);
+        }
+
+        // 5. NETTOYAGE : On cache le slider et le score pour la propreté.
         if (barreSlider != null) barreSlider.gameObject.SetActive(false);
         if (scoreSystem != null) scoreSystem.gameObject.SetActive(false);
 
-        // On fige le moteur physique et temporel d'Unity
+        // 6. PAUSE GÉNÉRALE : On fige le temps Unity (arrêt de Time.deltaTime).
         Time.timeScale = 0; 
     }
 }
