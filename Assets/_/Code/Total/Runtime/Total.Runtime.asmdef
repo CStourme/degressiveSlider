@@ -1,11 +1,8 @@
 {
-    "name": "Handles.Runtime",
-    "rootNamespace": "Handles.Runtime",
+    "name": "Total.Runtime",
+    "rootNamespace": "Total.Runtime",
     "references": [
-        "GUID:5b673d135855f7f40ba90365012d47ee",
-        "GUID:6055be8ebefd69e48b49212b09b47b2f",
-        "GUID:36b5a98d833d3fc4d8be01271507eb7a",
-        "GUID:b6ad55530ff88064492abd6ba11d70ca"
+        "GUID:6055be8ebefd69e48b49212b09b47b2f"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

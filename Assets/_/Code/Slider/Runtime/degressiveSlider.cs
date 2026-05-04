@@ -14,7 +14,7 @@ public class degressiveSlider : MonoBehaviour
         // Je défini que la valeur maximum du slider est égal à total (1)
         UISlider.maxValue = total;
         // Je force le slider à commencer au maximum
-        UISlider.value = total;
+        UISlider.value = 0.5f;
         
     }
 

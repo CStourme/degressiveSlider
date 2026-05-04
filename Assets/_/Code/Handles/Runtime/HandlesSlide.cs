@@ -7,22 +7,35 @@ public class HandleSlide : MonoBehaviour
     // --- LES "BOITES" (VARIABLES) ---
     // On prépare les cases pour glisser nos objets depuis Unity
     [Header("Références")]
+    [SerializeField] private RectTransform canvasParent; // Glisser l'objet Canvas ici pour servir de parent aux prefabs de fin
     [SerializeField] public RectTransform poigneeGauche; 
     [SerializeField] public RectTransform poigneeDroite;
     [SerializeField] public Slider barreSlider;
     
-    // Communication : ce script envoie le score au script "AffichageValeur"
-    [SerializeField] public AffichageValeur scoreText;
+    // Communication : ce script envoie les points au nouveau système de score et record
+    [SerializeField] public Total scoreSystem; 
     
-    // Communication : on a besoin de l'objet texte de TextMeshPro pour le temps
-    [SerializeField] public TextMeshProUGUI timerText;
+    // Communication : référence vers le script Timer externe pour synchroniser la fin de partie
+    [SerializeField] public Timer timerSystem;
     
-    // Référence vers l'objet qui contient le message de fin
+    // Référence vers le prefab qui contient le message ELAPSED TIME (Temps écoulé)
     [SerializeField] public GameObject elapsedTimeText;
+    
+    // Référence vers le prefab qui contient le message GAME OVER (Score à zéro)
+    [SerializeField] public GameObject gameOverText;
     
     // --- LES RÉGLAGES ---
     [Header("Gameplay Settings")]
-    [SerializeField] private float tempsTotal = 15f;
+    // Temps de protection pour ne pas perdre 5 points trop souvent (anti-spam de faute)
+    [SerializeField] private float penaliteDeFranchissement = 5f;
+    [SerializeField] private float tempsDeGraceFranchissement = 1.0f; 
+
+    // Paramètres pour varier le motif de mouvement à chaque lancement
+    [Header("Réglages du Seed (Aléatoire)")]
+    [Tooltip("Si coché, le jeu choisira un motif différent à chaque démarrage")]
+    [SerializeField] private bool utiliserSeedAleatoire = true;
+    [Tooltip("La valeur fixe du motif (si le mode aléatoire est décoché)")]
+    [SerializeField] private float seedFixe = 0f;
     
     [Header("Mouvement Global (Position)")]
     [SerializeField] public float vitesseDeDeplacement = 0.5f;
@@ -35,175 +48,181 @@ public class HandleSlide : MonoBehaviour
     [SerializeField] public float forceVariationZone = 20f;
     [Tooltip("Vitesse à laquelle la zone change de taille")]
     [SerializeField] public float vitesseVariationZone = 1.0f;
-
+    
     // --- LES VARIABLES CACHÉES (Mémoire interne) ---
     private float monScore = 0f;
-    private float tempsEcoule = 0f;
-    private float franchissement = 4f;
+    private float tempsEcouleLocal = 0f; // Chrono interne utilisé uniquement pour le calcul du bruit de Perlin
     private Image PoigneeGaucheColor;
     private Image PoigneeDroiteColor;
     
+    // Valeur de décalage pour le Perlin Noise (permet de changer de "chemin" à chaque partie)
+    private float seedActuelle;
+    // Le chrono de protection actuel (décompte après une faute)
+    private float timerGraceActuel = 0f; 
     // Les interrupteurs (booléens) pour mémoriser des états
     private bool etaitDansLaZone = false;
     private bool jeuTermine = false; 
 
     void Awake()
     {
-        // On initialise le score de départ
+        // On initialise le score de départ à 50
         monScore = 50f;
+
+        // Gestion du seed : on définit le point de départ sur la carte infinie du Perlin Noise
+        if (utiliserSeedAleatoire)
+        {
+            // On choisit un nombre au hasard très grand pour un motif unique
+            seedActuelle = Random.Range(0f, 99999f);
+        }
+        else
+        {
+            seedActuelle = seedFixe;
+        }
         
-        // On va chercher le pot de peinture (Image) sur les poignées pour changer leur couleur plus tard
+        // On récupère les composants Image pour pouvoir changer la couleur (Vert/Rouge) dynamiquement
         PoigneeGaucheColor = poigneeGauche.GetComponent<Image>();
         PoigneeDroiteColor = poigneeDroite.GetComponent<Image>();
     }
 
     void Update()
     {
-        // SECURITÉ : Si l'interrupteur 'jeuTermine' est allumé, on ne fait plus rien
+        // SECURITÉ : Si l'interrupteur 'jeuTermine' est allumé, on stoppe toute la logique
         if (jeuTermine == true)
         {
-            return; // On arrête l'Update ici
+            return; 
         }
 
-        // On augmente notre propre chronomètre interne (Time.deltaTime est le temps entre 2 images)
-        tempsEcoule = tempsEcoule + Time.deltaTime;
+        // On fait descendre le chrono de protection s'il est actif (Time.deltaTime = temps depuis l'image précédente)
+        if (timerGraceActuel > 0) 
+        {
+            timerGraceActuel -= Time.deltaTime;
+        }
+
+        // On augmente le temps local pour que le mouvement de Perlin continue d'avancer
+        tempsEcouleLocal = tempsEcouleLocal + Time.deltaTime;
 
         // --- ETAPE 1 : CALCULER LA POSITION DU CENTRE ---
-        // Le PerlinNoise donne un chiffre entre 0 et 1 qui bouge doucement.
-        float calculBruitPos = Mathf.PerlinNoise(tempsEcoule * vitesseDeDeplacement, 0f);
-        // On transforme le 0 à 1 en -0.5 à 0.5 pour avoir un centre
-        float positionZeroUn = calculBruitPos - 0.5f;
-        // On multiplie par la largeur totale (300 car le slider va de -150 à 150)
-        float centreX = positionZeroUn * (largeurDuSlider * 2f);
+        // Le PerlinNoise renvoie une valeur entre 0 et 1 de façon fluide
+        float calculBruitPos = Mathf.PerlinNoise((tempsEcouleLocal * vitesseDeDeplacement) + seedActuelle, 0f);
+        // On recentre la valeur (-0.5 à 0.5) et on l'adapte à la largeur du slider
+        float centreX = (calculBruitPos - 0.5f) * (largeurDuSlider * 2f);
 
 
         // --- ETAPE 2 : CALCULER LA LARGEUR DE LA ZONE ---
-        // On fait varier la taille de l'écart avec un autre bruit Perlin
-        float calculBruitLargeur = Mathf.PerlinNoise(tempsEcoule * vitesseVariationZone, 500f);
-        float largeurVariable = calculBruitLargeur - 0.5f; 
-        float largeurFinale = largeurZoneCible + (largeurVariable * (forceVariationZone * 2f));
+        // On utilise un deuxième échantillon de bruit (décalé de 500) pour que la taille varie indépendamment de la position
+        float calculBruitLargeur = Mathf.PerlinNoise((tempsEcouleLocal * vitesseVariationZone) + seedActuelle, 500f);
+        float largeurFinale = largeurZoneCible + ((calculBruitLargeur - 0.5f) * (forceVariationZone * 2f));
 
 
         // --- ETAPE 3 : PLACER LES POIGNÉES ---
-        // On calcule les positions X par rapport au centre et à la largeur
-        float posX_Gauche = centreX - (largeurFinale / 2f);
-        float posX_Droite = centreX + (largeurFinale / 2f);
-
-        // On applique physiquement les positions sur les objets UI dans Unity
-        poigneeGauche.anchoredPosition = new Vector2(posX_Gauche, 0f);
-        poigneeDroite.anchoredPosition = new Vector2(posX_Droite, 0f);
+        // On positionne les poignées à gauche et à droite du centre calculé
+        poigneeGauche.anchoredPosition = new Vector2(centreX - (largeurFinale / 2f), 0f);
+        poigneeDroite.anchoredPosition = new Vector2(centreX + (largeurFinale / 2f), 0f);
 
 
-        // --- ETAPE 4 : CALCULER LA POSITION DU CURSEUR DU SLIDER ---
-        // On regarde la valeur du Slider (0 à 1) et on la transforme en position X (-150 à 150)
+        // --- ETAPE 4 : POSITION DU CURSEUR ---
+        // On convertit la valeur du Slider (0 à 1) en position X réelle dans l'UI
         float positionXDuCurseur = Mathf.Lerp(-largeurDuSlider, largeurDuSlider, barreSlider.value);
 
 
-        // --- ETAPE 5 : VÉRIFIER SI ON GAGNE OU ON PERD ---
-        // On crée une condition pour savoir si on est au milieu des deux poignées
-        bool estAuMilieu = (positionXDuCurseur > posX_Gauche && positionXDuCurseur < posX_Droite);
+        // --- ETAPE 5 : LOGIQUE DE COLLISION ET SCORE ---
+        // On vérifie si le curseur est coincé entre les deux poignées
+        bool estAuMilieu = (positionXDuCurseur > poigneeGauche.anchoredPosition.x && positionXDuCurseur < poigneeDroite.anchoredPosition.x);
         
         if (estAuMilieu)
         {
-            // --- CAS A : ON EST DANS LA ZONE ---
+            // Gain de points progressif quand on est dans la zone
             monScore = monScore + Time.deltaTime;
-            
-            // On met les deux poignées en vert
             PoigneeGaucheColor.color = Color.green;
             PoigneeDroiteColor.color = Color.green;
-            
-            // On "arme" le piège : on mémorise qu'on est à l'intérieur
             etaitDansLaZone = true;
         }
         else
         {
-            // --- CAS B : ON EST À L'EXTÉRIEUR ---
-            
-            // On vérifie si on vient juste de franchir la limite
+            // Si on sort de la zone (Franchissement de limite)
             if (etaitDansLaZone == true)
             {
-                monScore = monScore - franchissement; // Perte de 4 points d'un coup
-                etaitDansLaZone = false; // On désarme le piège pour ne pas perdre 4pts en boucle
+                // On applique la grosse pénalité seulement si on n'est pas protégé par le temps de grâce
+                if (timerGraceActuel <= 0)
+                {
+                    monScore = monScore - penaliteDeFranchissement;
+                    timerGraceActuel = tempsDeGraceFranchissement;
+                }
+                etaitDansLaZone = false;
             }
 
-            // On perd aussi un petit peu de score chaque seconde
+            // Perte de points constante quand on est hors zone
             monScore = monScore - Time.deltaTime;
 
-            // Logique des couleurs : on allume en rouge seulement la poignée qui a été dépassée
-            if (positionXDuCurseur <= posX_Gauche)
+            // Feedback visuel : on allume en rouge la poignée que l'on dépasse
+            if (positionXDuCurseur <= poigneeGauche.anchoredPosition.x)
             {
                 PoigneeGaucheColor.color = Color.red;
                 PoigneeDroiteColor.color = Color.green; 
             }
-            else if (positionXDuCurseur >= posX_Droite)
+            else
             {
                 PoigneeDroiteColor.color = Color.red;
                 PoigneeGaucheColor.color = Color.green; 
             }
         }
         
-        // --- ETAPE 6 : ENVOYER LES DONNÉES À L'INTERFACE (UI) ---
-        
-        // On envoie le score au script de texte externe s'il existe
-        if (scoreText != null)
+        // --- ETAPE 6 : MISE À JOUR DU SCORE ET RECORDS ---
+        // On envoie le score au script Total qui gère l'affichage et la sauvegarde JSON
+        if (scoreSystem != null)
         {
-            scoreText.MettreAJourTexte(monScore);
+            scoreSystem.MettreAJourAffichage(monScore);
         }
 
-        // Gestion du Timer
-        if (timerText != null)
+        // --- ETAPE 7 : GESTION DES CONDITIONS DE FIN ---
+        if (timerSystem != null && jeuTermine == false)
         {
-            float tempsRestant = tempsTotal - tempsEcoule;
+            // On récupère le temps restant calculé par le script Timer.cs
+            float tempsRestant = timerSystem.GetTempsRestant();
             
-            // Si le temps arrive à zéro
-            if (tempsRestant <= 0 && jeuTermine == false)
+            // CONDITION 1 : Plus de points = Game Over
+            if (monScore <= 0)
             {
-                tempsRestant = 0;
-                TerminerLeJeu(); // On appelle les instructions de fin
+                monScore = 0;
+                TerminerPartie(gameOverText);
             }
-
-            // On affiche le mot "Timer" suivi du chiffre arrondi à zéro virgule
-            timerText.text = "Timer : " + tempsRestant.ToString("F0");
+            // CONDITION 2 : Temps écoulé = Fin de partie classique
+            else if (tempsRestant <= 0)
+            {
+                TerminerPartie(elapsedTimeText);
+            }
         }
     }
 
-    // --- FONCTION DE FIN DE JEU (Les ordres de clôture) ---
-    void TerminerLeJeu()
+    // --- FONCTION GÉNÉRALE DE FIN DE PARTIE ---
+    // Cette fonction centralise l'arrêt du jeu pour éviter les répétitions de code
+    void TerminerPartie(GameObject prefabFin)
     {
-        // On allume l'interrupteur pour bloquer l'Update
         jeuTermine = true; 
+        
+        // On demande au timer de s'arrêter visuellement
+        if (timerSystem != null) timerSystem.FigerTimer();
 
-        // On rend visible l'objet "Elapsed Time" (texte, bouton, etc.)
-        if (elapsedTimeText != null)
+        // On affiche le message de fin (Elapsed ou Game Over)
+        if (prefabFin != null)
         {
-            // 1. On crée l'instance
-            GameObject instance = Instantiate(elapsedTimeText, transform.parent);
+            Transform parentFinal = (canvasParent != null) ? canvasParent : transform.parent;
+            GameObject instance = Instantiate(prefabFin, parentFinal);
             
-            // 2. CORRECTION : On force l'échelle à 1 (sinon il est souvent à 0 ou minuscule)
-            instance.transform.localScale = Vector3.one;
-
-            // 3. CORRECTION : On centre l'objet dans l'écran
             RectTransform rt = instance.GetComponent<RectTransform>();
             if (rt != null)
             {
-                rt.anchoredPosition = Vector2.zero; 
+                rt.anchoredPosition = Vector2.zero;
+                rt.localScale = Vector3.one;
             }
             instance.SetActive(true);
         }
 
-        // On fait disparaître le Slider de l'écran (on accède au .gameObject pour l'éteindre)
-        if (barreSlider != null)
-        {
-            barreSlider.gameObject.SetActive(false);
-        }
+        // On cache les éléments de jeu pour la propreté visuelle
+        if (barreSlider != null) barreSlider.gameObject.SetActive(false);
+        if (scoreSystem != null) scoreSystem.gameObject.SetActive(false);
 
-        // On fait disparaître le texte du Score
-        if (scoreText != null)
-        {
-            scoreText.gameObject.SetActive(false);
-        }
-
-        // On demande au moteur Unity de figer le temps (plus rien ne bouge)
+        // On fige le moteur physique et temporel d'Unity
         Time.timeScale = 0; 
     }
 }
